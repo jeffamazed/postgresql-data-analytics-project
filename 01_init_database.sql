@@ -1,59 +1,88 @@
--- WARNING:
--- This will drop the 'data_warehouse_analytics' database if it exists.
--- All data will be permanently deleted.
+-- ============================================================================
+-- WARNING: This will drop the 'data_warehouse_analytics' database if it exists.
+--          All data will be permanently deleted.
+-- ============================================================================
 
--- Run this part while connected to another database (e.g., 'postgres')
+-- STEP 1: Run this section while connected to another database (e.g., 'postgres')
 DROP DATABASE IF EXISTS data_warehouse_analytics;
 CREATE DATABASE data_warehouse_analytics;
 
--- After creation, connect to the new database:
--- In psql: \c data_warehouse_analytics
+-- ============================================================================
+-- STEP 2: After creation, connect to the new database:
+--         In psql: \c data_warehouse_analytics
+-- ============================================================================
 
--- Once connected to 'data_warehouse_analytics', run:
+-- STEP 3: Create the target schema if it doesn't already exist
 CREATE SCHEMA IF NOT EXISTS gold;
 
--- Drop table if exists
-DROP TABLE IF EXISTS gold.dim_customers;
-DROP TABLE IF EXISTS gold.dim_products;
+-- ============================================================================
+-- STEP 4: Drop existing tables in the 'gold' schema to avoid conflicts
+-- ============================================================================
+
 DROP TABLE IF EXISTS gold.fact_sales;
+DROP TABLE IF EXISTS gold.dim_products;
+DROP TABLE IF EXISTS gold.dim_customers;
 
--- Create tables
+-- ============================================================================
+-- STEP 5: Create Dimension and Fact Tables
+-- ============================================================================
 
-CREATE TABLE gold.dim_customers(
-  customer_key int,
-  customer_id int,
-  customer_number nvarchar(50),
-  first_name nvarchar(50),
-  last_name nvarchar(50),
-  country nvarchar(50),
-  marital_status nvarchar(50),
-  gender nvarchar(50),
-  birthdate date,
-  create_date date
+-- Customer Dimension Table
+CREATE TABLE gold.dim_customers (
+  customer_key     INT,
+  customer_id      INT,
+  customer_number  VARCHAR(50),
+  first_name       VARCHAR(50),
+  last_name        VARCHAR(50),
+  country          VARCHAR(50),
+  marital_status   VARCHAR(50),
+  gender           VARCHAR(50),
+  birthdate        DATE,
+  create_date      DATE
 );
 
-CREATE TABLE gold.dim_products(
-  product_key int ,
-  product_id int ,
-  product_number nvarchar(50) ,
-  product_name nvarchar(50) ,
-  category_id nvarchar(50) ,
-  category nvarchar(50) ,
-  subcategory nvarchar(50) ,
-  maintenance nvarchar(50) ,
-  cost int,
-  product_line nvarchar(50),
-  start_date date 
+-- Product Dimension Table
+CREATE TABLE gold.dim_products (
+  product_key      INT,
+  product_id       INT,
+  product_number   VARCHAR(50),
+  product_name     VARCHAR(50),
+  category_id      VARCHAR(50),
+  category         VARCHAR(50),
+  subcategory      VARCHAR(50),
+  maintenance      VARCHAR(50),  -- Fixed capitalization of 'maintenance'
+  cost             INT,
+  product_line     VARCHAR(50),
+  start_date       DATE
 );
 
-CREATE TABLE gold.fact_sales(
-  order_number nvarchar(50),
-  product_key int,
-  customer_key int,
-  order_date date,
-  shipping_date date,
-  due_date date,
-  sales_amount int,
-  quantity tinyint,
-  price int 
+-- Fact Table: Sales
+CREATE TABLE gold.fact_sales (
+  order_number     VARCHAR(50),
+  product_key      INT,
+  customer_key     INT,
+  order_date       DATE,
+  shipping_date    DATE,
+  due_date         DATE,
+  sales_amount     INT,
+  quantity         SMALLINT,
+  price            INT
 );
+
+-- ============================================================================
+-- STEP 6: Load data from CSV files
+-- NOTE:
+--   - These paths are relative, so ensure your terminal's working directory
+--     is set correctly (where 'datasets/csv_files/' is accessible).
+--   - '\COPY' is a psql client command, not SQL — run this inside psql.
+-- ============================================================================
+
+-- Clear existing data (if any) before inserting
+TRUNCATE TABLE gold.dim_customers;
+TRUNCATE TABLE gold.dim_products;
+TRUNCATE TABLE gold.fact_sales;
+
+-- Load data from CSV files
+\COPY gold.dim_customers FROM 'datasets/csv_files/gold.dim_customers.csv' WITH (FORMAT csv, HEADER true);
+\COPY gold.dim_products  FROM 'datasets/csv_files/gold.dim_products.csv'  WITH (FORMAT csv, HEADER true);
+\COPY gold.fact_sales    FROM 'datasets/csv_files/gold.fact_sales.csv'    WITH (FORMAT csv, HEADER true);

@@ -1,63 +1,62 @@
 /*
   Analyze the yearly performance of products by comparing:
-  - Their sales each year (`current_sales`)
-  - The average sales of the product across all years (`avg_sales`)
-  - The sales in the previous year (`prev_year_sales`)
+  - Their yearly sales (`current_sales`)
+  - Their sales in the previous year (`prev_year_sales`)
+  - Their average sales across all years (`avg_sales`)
 */
 
 WITH yearly_product_sales AS (
   SELECT 
-    EXTRACT(YEAR FROM f.order_date) AS order_year,        -- Extract the year from the order date
-    p.product_name,                                       -- Product name from the dimension table
-    SUM(f.sales_amount) AS current_sales,                 -- Total sales per product per year
-
-    -- Average yearly sales per product across all years (window function)
-    ROUND(AVG(SUM(f.sales_amount)) OVER (
-      PARTITION BY p.product_name
-    )) AS avg_sales,
-
-    -- Sales in the previous year per product (using LAG)
-    LAG(SUM(f.sales_amount)) OVER (
-      PARTITION BY p.product_name 
-      ORDER BY EXTRACT(YEAR FROM f.order_date)
-    ) AS prev_year_sales
-
+    EXTRACT(YEAR FROM f.order_date) AS order_year,    -- Extract year from order_date
+    p.product_name,                                   -- Product name
+    SUM(f.sales_amount) AS current_sales              -- Total sales for the product in the year
   FROM gold.fact_sales f
   LEFT JOIN gold.dim_products p
     ON f.product_key = p.product_key
-
   WHERE f.order_date IS NOT NULL
-
   GROUP BY 
     EXTRACT(YEAR FROM f.order_date),
     p.product_name
 )
 
 SELECT 
-  order_year,                       -- Year of the sales record
-  product_name,                     -- Product name
-  current_sales,                    -- Current year's total sales
-  prev_year_sales,                 -- Last year's sales (if available)
-  
-  -- Difference from the previous year
-  current_sales - prev_year_sales AS diff_prev_year_sales,
+  order_year,
+  product_name,
+  current_sales,
 
-  -- Sales trend vs previous year
+  -- Previous year's sales using LAG window function
+  LAG(current_sales) OVER (
+    PARTITION BY product_name 
+    ORDER BY order_year
+  ) AS prev_year_sales,
+
+  -- Difference from the previous year
+  current_sales - LAG(current_sales) OVER (
+    PARTITION BY product_name 
+    ORDER BY order_year
+  ) AS diff_prev_year_sales,
+
+  -- Trend compared to previous year
   CASE 
-    WHEN current_sales - prev_year_sales > 0 THEN 'Increasing'
-    WHEN current_sales - prev_year_sales < 0 THEN 'Decreasing'
+    WHEN current_sales - LAG(current_sales) OVER (PARTITION BY product_name ORDER BY order_year) > 0 THEN 'Increasing'
+    WHEN current_sales - LAG(current_sales) OVER (PARTITION BY product_name ORDER BY order_year) < 0 THEN 'Decreasing'
     ELSE 'No Change'
   END AS prev_year_change,
 
-  avg_sales,                        -- Average sales of the product across all years
+  -- Average sales across all years per product
+  ROUND(AVG(current_sales) OVER (
+    PARTITION BY product_name
+  )) AS avg_sales,
 
-  -- Difference from the average
-  current_sales - avg_sales AS diff_avg,
+  -- Difference from average
+  current_sales - ROUND(AVG(current_sales) OVER (
+    PARTITION BY product_name
+  )) AS diff_avg,
 
-  -- Sales trend vs average
+  -- Trend compared to average
   CASE 
-    WHEN current_sales > avg_sales THEN 'Above Avg'
-    WHEN current_sales < avg_sales THEN 'Below Avg'
+    WHEN current_sales > AVG(current_sales) OVER (PARTITION BY product_name) THEN 'Above Avg'
+    WHEN current_sales < AVG(current_sales) OVER (PARTITION BY product_name) THEN 'Below Avg'
     ELSE 'Avg'
   END AS avg_change
 
